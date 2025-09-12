@@ -11,11 +11,13 @@ GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
 # Configurar Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Configurar intents
+# Configurar intents CORREGIDOS
 intents = discord.Intents.default()
 intents.message_content = True
+intents.messages = True
+intents.guilds = True
 
-# Bot SIN el connector problemático
+# Bot
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 class GeminiManager:
@@ -65,8 +67,8 @@ async def clear(ctx):
     gemini_mgr.chat = gemini_mgr.model.start_chat(history=[])
     await ctx.send("🧹 Historial de conversación limpiado")
 
-# EJECUCIÓN con manejo de errores
+# EJECUCIÓN
 try:
     bot.run(DISCORD_TOKEN)
 except Exception as e:
-    print(f"❌ Error de conexión: {e}")
+    print(f"❌ Error: {e}")
