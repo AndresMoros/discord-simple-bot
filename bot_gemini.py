@@ -96,15 +96,37 @@ async def ask(interaction: discord.Interaction, pregunta: str):
     await interaction.response.defer()
     respuesta = await gemini_mgr.get_response(pregunta)
     
-    # Dividir respuesta si es muy larga
-    chunks = split_long_message(respuesta)
+    # Si la respuesta es extremadamente larga, enviar como archivo
+    if len(respuesta) > 4000:
+        await interaction.followup.send("📝 Respuesta muy larga. Enviando como archivo...")
+        
+        # Crear archivo temporal
+        with open("respuesta.txt", "w", encoding="utf-8") as f:
+            f.write(f"Pregunta: {pregunta}\n\nRespuesta:\n{respuesta}")
+        
+        # Enviar archivo
+        await interaction.followup.send(file=discord.File("respuesta.txt"))
+        
+        # Limpiar archivo temporal
+        if os.path.exists("respuesta.txt"):
+            os.remove("respuesta.txt")
+        return
     
-    # Enviar el primer chunk
+    # Dividir respuesta normal
+    chunks = split_long_message(respuesta)
+    chunks = chunks[:4]  # Máximo 4 chunks + mensaje inicial = 5 total (límite de Discord)
+    
+    # Enviar primer chunk
     await interaction.followup.send(f"🤖 {chunks[0]}")
     
-    # Enviar chunks adicionales si hay más
+    # Enviar chunks adicionales con delays
     for chunk in chunks[1:]:
+        await asyncio.sleep(0.5)  # Delay para evitar rate limiting
         await interaction.followup.send(chunk)
+    
+    # Notificar si se truncó la respuesta
+    if len(respuesta) > sum(len(chunk) for chunk in chunks):
+        await interaction.followup.send("ℹ️ *La respuesta fue acortada por ser demasiado larga.*")
 
 @bot.tree.command(name="stats", description="Muestra estadísticas del bot")
 async def stats(interaction: discord.Interaction):
@@ -113,7 +135,14 @@ async def stats(interaction: discord.Interaction):
 @bot.tree.command(name="clear", description="Limpia el historial de conversación")
 async def clear(interaction: discord.Interaction):
     gemini_mgr.chat = gemini_mgr.model.start_chat(history=[])
-    await interaction.response.send_message("🧹 Historial limpiado")
+    await interaction.response.send_message("🧹 Historial de conversación limpiado")
+
+# Manejo de errores global
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error):
+    if isinstance(error, app_commands.CommandInvokeError):
+        await interaction.followup.send("❌ Error al procesar el comando. Intenta más tarde.", ephemeral=True)
+        print(f"❌ Error en comando: {error}")
 
 # EJECUCIÓN
 try:
