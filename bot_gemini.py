@@ -24,14 +24,20 @@ class GeminiManager:
         self.chat = self.model.start_chat(history=[])
         self.total_requests = 0
 
-    async def get_response(self, prompt):
+    async def get_response(self, prompt, max_tokens=None):
         try:
             self.total_requests += 1
             print(f"📨 Enviando: {prompt[:50]}...")
             
+            # Configuración de generación
+            generation_config = {}
+            if max_tokens:
+                generation_config["max_output_tokens"] = max_tokens
+            
             response = await asyncio.to_thread(
                 self.model.generate_content, 
-                prompt
+                prompt,
+                generation_config=generation_config or None
             )
             
             if response.text:
@@ -86,7 +92,22 @@ def split_long_message(message, max_length=2000):
     
     return chunks
 
-@bot.tree.command(name="ask", description="Haz una pregunta al bot con IA")
+def ensure_short_response(response, max_length=1500):
+    """Asegura que la respuesta no exceda el límite de un mensaje"""
+    if len(response) <= max_length:
+        return response
+    
+    # Truncar inteligentemente en un punto natural
+    truncated = response[:max_length]
+    
+    # Encontrar el último punto completo
+    last_period = truncated.rfind('.')
+    if last_period > max_length * 0.7:  # Si hay un punto en el 70% final
+        return truncated[:last_period + 1] + ".. (respuesta truncada)"
+    else:
+        return truncated + ".. (respuesta truncada)"
+
+@bot.tree.command(name="ask", description="Haz una pregunta al bot con IA (respuesta completa)")
 @app_commands.describe(pregunta="Escribe tu pregunta aquí")
 async def ask(interaction: discord.Interaction, pregunta: str):
     if len(pregunta) > 500:
@@ -114,19 +135,39 @@ async def ask(interaction: discord.Interaction, pregunta: str):
     
     # Dividir respuesta normal
     chunks = split_long_message(respuesta)
-    chunks = chunks[:4]  # Máximo 4 chunks + mensaje inicial = 5 total (límite de Discord)
+    chunks = chunks[:4]  # Máximo 4 chunks + mensaje inicial = 5 total
     
     # Enviar primer chunk
     await interaction.followup.send(f"🤖 {chunks[0]}")
     
     # Enviar chunks adicionales con delays
     for chunk in chunks[1:]:
-        await asyncio.sleep(0.5)  # Delay para evitar rate limiting
+        await asyncio.sleep(0.5)
         await interaction.followup.send(chunk)
     
     # Notificar si se truncó la respuesta
     if len(respuesta) > sum(len(chunk) for chunk in chunks):
         await interaction.followup.send("ℹ️ *La respuesta fue acortada por ser demasiado larga.*")
+
+@bot.tree.command(name="quick", description="Haz una pregunta con respuesta rápida y corta (1 mensaje máximo)")
+@app_commands.describe(pregunta="Escribe tu pregunta para respuesta rápida")
+async def quick(interaction: discord.Interaction, pregunta: str):
+    if len(pregunta) > 300:
+        await interaction.response.send_message("❌ La pregunta es muy larga. Máximo 300 caracteres.", ephemeral=True)
+        return
+    
+    await interaction.response.defer()
+    
+    # Prompt optimizado para respuestas cortas
+    quick_prompt = f"Responde de forma extremadamente concisa y directa (máximo 1200 caracteres, sé breve y ve al punto): {pregunta}"
+    
+    respuesta = await gemini_mgr.get_response(quick_prompt, max_tokens=250)
+    
+    # Forzar respuesta corta
+    respuesta_corta = ensure_short_response(respuesta, 1500)
+    
+    # Emoji de rayo para respuestas rápidas ⚡
+    await interaction.followup.send(f"⚡ {respuesta_corta}")
 
 @bot.tree.command(name="stats", description="Muestra estadísticas del bot")
 async def stats(interaction: discord.Interaction):
