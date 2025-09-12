@@ -40,6 +40,8 @@ gemini_mgr = GeminiManager()
 async def on_ready():
     print(f'✅ Bot conectado como {bot.user}')
     print('🤖 Usando Google Gemini')
+    
+    # Sincronizar comandos slash
     try:
         synced = await bot.tree.sync()
         print(f"✅ Sincronizados {len(synced)} comandos slash")
@@ -47,10 +49,11 @@ async def on_ready():
         print(f"❌ Error sincronizando comandos: {e}")
 
 # COMANDO SLASH (/ask)
-@bot.tree.command(name="ask", description="Haz una pregunta al bot")
+@bot.tree.command(name="ask", description="Haz una pregunta al bot con IA")
+@app_commands.describe(pregunta="Escribe tu pregunta aquí")
 async def ask(interaction: discord.Interaction, pregunta: str):
     if len(pregunta) > 500:
-        await interaction.response.send_message("❌ La pregunta es muy larga. Máximo 500 caracteres.")
+        await interaction.response.send_message("❌ La pregunta es muy larga. Máximo 500 caracteres.", ephemeral=True)
         return
     
     await interaction.response.defer()
@@ -63,10 +66,16 @@ async def ask(interaction: discord.Interaction, pregunta: str):
     else:
         await interaction.followup.send(f"🤖 {respuesta}")
 
-# COMANDO DE PREFIJO (!stats)
-@bot.command()
-async def stats(ctx):
-    await ctx.send(f"📊 Total de requests: {gemini_mgr.total_requests}")
+# COMANDO SLASH (/stats)
+@bot.tree.command(name="stats", description="Muestra estadísticas del bot")
+async def stats(interaction: discord.Interaction):
+    await interaction.response.send_message(f"📊 Total de requests: {gemini_mgr.total_requests}")
+
+# COMANDO SLASH (/clear)
+@bot.tree.command(name="clear", description="Limpia el historial de conversación")
+async def clear(interaction: discord.Interaction):
+    gemini_mgr.chat = gemini_mgr.model.start_chat(history=[])
+    await interaction.response.send_message("🧹 Historial de conversación limpiado")
 
 # EJECUCIÓN
 try:
