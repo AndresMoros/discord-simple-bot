@@ -12,45 +12,52 @@ GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
 # Configurar Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Configurar intents
 intents = discord.Intents.default()
 intents.message_content = True
 
-# Bot
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 class GeminiManager:
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-pro')
+        # USAR GEMINI 2.0 FLASH
+        self.model = genai.GenerativeModel('gemini-2.0-flash')
         self.chat = self.model.start_chat(history=[])
         self.total_requests = 0
 
     async def get_response(self, prompt):
         try:
             self.total_requests += 1
-            response = await asyncio.to_thread(self.chat.send_message, prompt)
-            return response.text
+            print(f"📨 Enviando: {prompt[:50]}...")
+            
+            # Usar generate_content en vez de send_message para mejor compatibilidad
+            response = await asyncio.to_thread(
+                self.model.generate_content, 
+                prompt
+            )
+            
+            if response.text:
+                print("✅ Respuesta recibida de Gemini 2.0 Flash")
+                return response.text
+            else:
+                return "❌ No recibí respuesta. Intenta de nuevo."
+                
         except Exception as e:
-            print(f"❌ Error completo con Gemini: {e}")
-            import traceback
-            traceback.print_exc()  # Esto mostrará el error completo
-            return "❌ Error al procesar tu pregunta. Intenta nuevamente."
+            print(f"❌ Error con Gemini 2.0 Flash: {e}")
+            return "❌ Error temporal. Intenta más tarde."
 
 gemini_mgr = GeminiManager()
 
 @bot.event
 async def on_ready():
     print(f'✅ Bot conectado como {bot.user}')
-    print('🤖 Usando Google Gemini')
+    print('🤖 Usando Google Gemini 2.0 Flash (Más rápido)')
     
-    # Sincronizar comandos slash
     try:
         synced = await bot.tree.sync()
         print(f"✅ Sincronizados {len(synced)} comandos slash")
     except Exception as e:
         print(f"❌ Error sincronizando comandos: {e}")
 
-# COMANDO SLASH (/ask)
 @bot.tree.command(name="ask", description="Haz una pregunta al bot con IA")
 @app_commands.describe(pregunta="Escribe tu pregunta aquí")
 async def ask(interaction: discord.Interaction, pregunta: str):
@@ -60,27 +67,19 @@ async def ask(interaction: discord.Interaction, pregunta: str):
     
     await interaction.response.defer()
     respuesta = await gemini_mgr.get_response(pregunta)
-    
-    if len(respuesta) > 2000:
-        chunks = [respuesta[i:i+2000] for i in range(0, len(respuesta), 2000)]
-        for chunk in chunks:
-            await interaction.followup.send(chunk)
-    else:
-        await interaction.followup.send(f"🤖 {respuesta}")
+    await interaction.followup.send(f"🤖 {respuesta}")
 
-# COMANDO SLASH (/stats)
 @bot.tree.command(name="stats", description="Muestra estadísticas del bot")
 async def stats(interaction: discord.Interaction):
     await interaction.response.send_message(f"📊 Total de requests: {gemini_mgr.total_requests}")
 
-# COMANDO SLASH (/clear)
 @bot.tree.command(name="clear", description="Limpia el historial de conversación")
 async def clear(interaction: discord.Interaction):
     gemini_mgr.chat = gemini_mgr.model.start_chat(history=[])
-    await interaction.response.send_message("🧹 Historial de conversación limpiado")
+    await interaction.response.send_message("🧹 Historial limpiado")
 
 # EJECUCIÓN
 try:
     bot.run(DISCORD_TOKEN)
 except Exception as e:
-    print(f"❌ Error: {e}")
+    print(f"❌ Error ejecutando el bot: {e}")
