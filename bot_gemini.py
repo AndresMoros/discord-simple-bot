@@ -31,8 +31,10 @@ class GeminiManager:
             response = await asyncio.to_thread(self.chat.send_message, prompt)
             return response.text
         except Exception as e:
-            print(f"Error con Gemini: {e}")
-            return "❌ Error al procesar tu pregunta."
+            print(f"❌ Error completo con Gemini: {e}")
+            import traceback
+            traceback.print_exc()  # Esto mostrará el error completo
+            return "❌ Error al procesar tu pregunta. Intenta nuevamente."
 
 gemini_mgr = GeminiManager()
 
