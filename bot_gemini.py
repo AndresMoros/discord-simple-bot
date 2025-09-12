@@ -29,20 +29,19 @@ class GeminiManager:
             self.total_requests += 1
             print(f"📨 Enviando: {prompt[:50]}...")
             
-            # Usar generate_content en vez de send_message para mejor compatibilidad
             response = await asyncio.to_thread(
                 self.model.generate_content, 
                 prompt
             )
             
             if response.text:
-                print("✅ Respuesta recibida de Gemini 2.0 Flash")
+                print(f"✅ Respuesta recibida ({len(response.text)} caracteres)")
                 return response.text
             else:
                 return "❌ No recibí respuesta. Intenta de nuevo."
                 
         except Exception as e:
-            print(f"❌ Error con Gemini 2.0 Flash: {e}")
+            print(f"❌ Error con Gemini: {e}")
             return "❌ Error temporal. Intenta más tarde."
 
 gemini_mgr = GeminiManager()
@@ -50,13 +49,42 @@ gemini_mgr = GeminiManager()
 @bot.event
 async def on_ready():
     print(f'✅ Bot conectado como {bot.user}')
-    print('🤖 Usando Google Gemini 2.0 Flash (Más rápido)')
+    print('🤖 Usando Google Gemini 2.0 Flash')
     
     try:
         synced = await bot.tree.sync()
         print(f"✅ Sincronizados {len(synced)} comandos slash")
     except Exception as e:
         print(f"❌ Error sincronizando comandos: {e}")
+
+def split_long_message(message, max_length=2000):
+    """Divide mensajes largos en chunks de máximo max_length caracteres"""
+    if len(message) <= max_length:
+        return [message]
+    
+    chunks = []
+    current_chunk = ""
+    
+    # Dividir por oraciones para no cortar palabras
+    sentences = message.split('. ')
+    for sentence in sentences:
+        # Si agregar esta oración excede el límite, guardar el chunk actual
+        if len(current_chunk) + len(sentence) + 2 > max_length:
+            if current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = ""
+        
+        # Agregar la oración al chunk actual
+        if current_chunk:
+            current_chunk += ". " + sentence
+        else:
+            current_chunk = sentence
+    
+    # Agregar el último chunk si queda algo
+    if current_chunk:
+        chunks.append(current_chunk + ".")
+    
+    return chunks
 
 @bot.tree.command(name="ask", description="Haz una pregunta al bot con IA")
 @app_commands.describe(pregunta="Escribe tu pregunta aquí")
@@ -67,7 +95,16 @@ async def ask(interaction: discord.Interaction, pregunta: str):
     
     await interaction.response.defer()
     respuesta = await gemini_mgr.get_response(pregunta)
-    await interaction.followup.send(f"🤖 {respuesta}")
+    
+    # Dividir respuesta si es muy larga
+    chunks = split_long_message(respuesta)
+    
+    # Enviar el primer chunk
+    await interaction.followup.send(f"🤖 {chunks[0]}")
+    
+    # Enviar chunks adicionales si hay más
+    for chunk in chunks[1:]:
+        await interaction.followup.send(chunk)
 
 @bot.tree.command(name="stats", description="Muestra estadísticas del bot")
 async def stats(interaction: discord.Interaction):
