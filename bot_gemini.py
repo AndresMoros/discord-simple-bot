@@ -74,23 +74,50 @@ def split_long_message(message, max_length=2000):
     # Dividir por oraciones para no cortar palabras
     sentences = message.split('. ')
     for sentence in sentences:
-        # Si agregar esta oración excede el límite, guardar el chunk actual
-        if len(current_chunk) + len(sentence) + 2 > max_length:
-            if current_chunk:
-                chunks.append(current_chunk)
-                current_chunk = ""
-        
-        # Agregar la oración al chunk actual
-        if current_chunk:
-            current_chunk += ". " + sentence
+        # Si la oración sola es demasiado larga, dividirla
+        if len(sentence) > max_length - 100:  # Dejar margen
+            words = sentence.split(' ')
+            for word in words:
+                if len(current_chunk) + len(word) + 1 > max_length:
+                    if current_chunk:
+                        chunks.append(current_chunk)
+                        current_chunk = ""
+                if current_chunk:
+                    current_chunk += " " + word
+                else:
+                    current_chunk = word
         else:
-            current_chunk = sentence
+            # Si agregar esta oración excede el límite, guardar el chunk actual
+            if len(current_chunk) + len(sentence) + 2 > max_length:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                    current_chunk = ""
+            
+            # Agregar la oración al chunk actual
+            if current_chunk:
+                current_chunk += ". " + sentence
+            else:
+                current_chunk = sentence
     
     # Agregar el último chunk si queda algo
     if current_chunk:
-        chunks.append(current_chunk + ".")
+        # Asegurar que no exceda el límite
+        if len(current_chunk) > max_length:
+            chunks.append(current_chunk[:max_length])
+            if len(current_chunk) > max_length:
+                chunks.append(current_chunk[max_length:max_length*2])
+        else:
+            chunks.append(current_chunk)
     
-    return chunks
+    # Asegurar que ningún chunk exceda el límite
+    final_chunks = []
+    for chunk in chunks:
+        while len(chunk) > max_length:
+            final_chunks.append(chunk[:max_length])
+            chunk = chunk[max_length:]
+        final_chunks.append(chunk)
+    
+    return final_chunks
 
 def ensure_short_response(response, max_length=1500):
     """Asegura que la respuesta no exceda el límite de un mensaje"""
@@ -115,39 +142,61 @@ async def ask(interaction: discord.Interaction, pregunta: str):
         return
     
     await interaction.response.defer()
-    respuesta = await gemini_mgr.get_response(pregunta)
     
-    # Si la respuesta es extremadamente larga, enviar como archivo
-    if len(respuesta) > 4000:
-        await interaction.followup.send("📝 Respuesta muy larga. Enviando como archivo...")
+    try:
+        respuesta = await gemini_mgr.get_response(pregunta)
         
-        # Crear archivo temporal
-        with open("respuesta.md", "w", encoding="utf-8") as f:
-            f.write(f"Pregunta: {pregunta}\n\nRespuesta:\n{respuesta}")
+        # DEBUG (después de obtener la respuesta)
+        print(f"📏 Longitud de respuesta: {len(respuesta)} caracteres")
         
-        # Enviar archivo
-        await interaction.followup.send(file=discord.File("respuesta.md"))
+        # Si la respuesta es extremadamente larga, enviar como archivo
+        if len(respuesta) > 4000:
+            await interaction.followup.send("📝 Respuesta muy larga. Enviando como archivo...")
+            
+            # Crear archivo temporal
+            with open("respuesta.txt", "w", encoding="utf-8") as f:
+                f.write(f"Pregunta: {pregunta}\n\nRespuesta:\n{respuesta}")
+            
+            # Enviar archivo
+            await interaction.followup.send(file=discord.File("respuesta.txt"))
+            
+            # Limpiar archivo temporal
+            if os.path.exists("respuesta.txt"):
+                os.remove("respuesta.txt")
+            return
         
-        # Limpiar archivo temporal
-        if os.path.exists("respuesta.md"):
-            os.remove("respuesta.md")
-        return
-    
-    # Dividir respuesta normal
-    chunks = split_long_message(respuesta)
-    chunks = chunks[:4]  # Máximo 4 chunks + mensaje inicial = 5 total
-    
-    # Enviar primer chunk
-    await interaction.followup.send(f"🤖 {chunks[0]}")
-    
-    # Enviar chunks adicionales con delays
-    for chunk in chunks[1:]:
-        await asyncio.sleep(0.5)
-        await interaction.followup.send(chunk)
-    
-    # Notificar si se truncó la respuesta
-    if len(respuesta) > sum(len(chunk) for chunk in chunks):
-        await interaction.followup.send("ℹ️ *La respuesta fue acortada por ser demasiado larga.*")
+        # Dividir respuesta normal
+        chunks = split_long_message(respuesta)
+        chunks = chunks[:4]  # Máximo 4 chunks + mensaje inicial = 5 total
+        
+        # ✅ AGREGAR AQUÍ TAMBIÉN (después de dividir en chunks)
+        print(f"📦 Número de chunks: {len(chunks)}")
+        for i, chunk in enumerate(chunks):
+            print(f"Chunk {i}: {len(chunk)} caracteres")
+            # Verificación de seguridad
+            if len(chunk) > 2000:
+                print(f"❌ PELIGRO: Chunk {i} tiene {len(chunk)} caracteres (más de 2000!)")
+                chunks[i] = chunk[:2000]  # Forzar truncamiento
+                print(f"✅ Corregido: Chunk {i} ahora tiene {len(chunks[i])} caracteres")
+        
+        # Enviar primer chunk
+        await interaction.followup.send(f"🤖 {chunks[0]}")
+        
+        # Enviar chunks adicionales con delays
+        for chunk in chunks[1:]:
+            await asyncio.sleep(0.5)
+            if chunk.strip():  # Solo enviar si no está vacío
+                await interaction.followup.send(chunk)
+        
+        # Notificar si se truncó la respuesta
+        if len(respuesta) > sum(len(chunk) for chunk in chunks):
+            await interaction.followup.send("ℹ️ *La respuesta fue acortada por ser demasiado larga.*")
+            
+    except Exception as e:
+        print(f"❌ Error en comando ask: {e}")
+        import traceback
+        traceback.print_exc()  # ← Esto mostrará el error completo
+        await interaction.followup.send("❌ Error al procesar tu pregunta. Intenta más tarde.")
 
 @bot.tree.command(name="quick", description="Haz una pregunta con respuesta rápida y corta (1 mensaje máximo)")
 @app_commands.describe(pregunta="Escribe tu pregunta para respuesta rápida")
