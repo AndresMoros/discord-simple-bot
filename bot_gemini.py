@@ -101,15 +101,15 @@ async def ask(interaction: discord.Interaction, pregunta: str):
         await interaction.followup.send("📝 Respuesta muy larga. Enviando como archivo...")
         
         # Crear archivo temporal
-        with open("respuesta.txt", "w", encoding="utf-8") as f:
+        with open("respuesta.md", "w", encoding="utf-8") as f:
             f.write(f"Pregunta: {pregunta}\n\nRespuesta:\n{respuesta}")
         
         # Enviar archivo
-        await interaction.followup.send(file=discord.File("respuesta.txt"))
+        await interaction.followup.send(file=discord.File("respuesta.md"))
         
         # Limpiar archivo temporal
-        if os.path.exists("respuesta.txt"):
-            os.remove("respuesta.txt")
+        if os.path.exists("respuesta.md"):
+            os.remove("respuesta.md")
         return
     
     # Dividir respuesta normal
