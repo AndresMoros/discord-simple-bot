@@ -183,54 +183,68 @@ async def ask(interaction: discord.Interaction, pregunta: str):
     try:
         respuesta = await gemini_mgr.get_response(pregunta)
         
-        # DEBUG
         print(f"📏 Longitud de respuesta: {len(respuesta)} caracteres")
         
-        # Si la respuesta es > 6000 caracteres, enviar como archivo Markdown
-        if len(respuesta) > 6000:
-            await interaction.followup.send("📝 Respuesta muy larga. Enviando como archivo Markdown...")
+        # DECISIÓN INTELIGENTE: ¿Archivo o mensajes?
+        usar_archivo = False
+        
+        # 1. Si es MUY largo (>8000 caracteres) → Archivo
+        if len(respuesta) > 8000:
+            usar_archivo = True
+            print("🔍 Decisión: Archivo (muy largo)")
+        
+        # 2. Si tiene estructura compleja (muchos puntos, listas) → Archivo
+        elif respuesta.count('.') > 20 or respuesta.count('-') > 10:
+            usar_archivo = True
+            print("🔍 Decisión: Archivo (estructura compleja)")
+        
+        # 3. Si es moderadamente largo pero bien estructurado → Dividir en mensajes
+        else:
+            # Dividir respuesta normal
+            chunks = split_long_message(respuesta)
+            chunks = chunks[:4]  # Máximo 4 chunks + mensaje inicial = 5 total
             
-            # Crear archivo Markdown con formato
+            print(f"📦 Número de chunks: {len(chunks)}")
+            
+            # Verificar si la división es eficiente
+            if len(chunks) > 3 and len(respuesta) > 4000:
+                usar_archivo = True
+                print("🔍 Decisión: Archivo (mala división)")
+            else:
+                # Enviar como mensajes normales
+                for i, chunk in enumerate(chunks):
+                    print(f"Chunk {i}: {len(chunk)} caracteres")
+                    if len(chunk) > 2000:
+                        chunks[i] = chunk[:2000]
+                
+                # Enviar primer chunk
+                await interaction.followup.send(f"🤖 {chunks[0]}")
+                
+                # Enviar chunks adicionales con delays
+                for chunk in chunks[1:]:
+                    await asyncio.sleep(0.5)
+                    if chunk.strip():
+                        await interaction.followup.send(chunk)
+                
+                # Notificar SOLO si fue significativamente truncado
+                if len(respuesta) > sum(len(chunk) for chunk in chunks) * 1.2:
+                    await interaction.followup.send("ℹ️ *La respuesta fue ligeramente acortada.*")
+                return
+        
+        # Si decidimos usar archivo
+        if usar_archivo:
+            await interaction.followup.send("📝 Creando documento con respuesta completa...")
+            
             filename = create_markdown_file(pregunta, respuesta, interaction.user.name)
             
-            # Enviar archivo
             await interaction.followup.send(
                 file=discord.File(filename),
-                content=f"📄 **Respuesta completa para:** {pregunta[:100]}..."
+                content=f"📄 **Respuesta completa para:** {pregunta[:80]}..."
             )
             
-            # Limpiar archivo temporal después de enviar
-            await asyncio.sleep(2)  # Esperar a que se envíe
+            await asyncio.sleep(2)
             if os.path.exists(filename):
                 os.remove(filename)
-            return
-        
-        # Dividir respuesta normal
-        chunks = split_long_message(respuesta)
-        chunks = chunks[:4]  # Máximo 4 chunks + mensaje inicial = 5 total
-        
-        # DEBUG
-        print(f"📦 Número de chunks: {len(chunks)}")
-        for i, chunk in enumerate(chunks):
-            print(f"Chunk {i}: {len(chunk)} caracteres")
-            # Verificación de seguridad
-            if len(chunk) > 2000:
-                print(f"❌ PELIGRO: Chunk {i} tiene {len(chunk)} caracteres (más de 2000!)")
-                chunks[i] = chunk[:2000]  # Forzar truncamiento
-                print(f"✅ Corregido: Chunk {i} ahora tiene {len(chunks[i])} caracteres")
-        
-        # Enviar primer chunk
-        await interaction.followup.send(f"🤖 {chunks[0]}")
-        
-        # Enviar chunks adicionales con delays
-        for chunk in chunks[1:]:
-            await asyncio.sleep(0.5)
-            if chunk.strip():  # Solo enviar si no está vacío
-                await interaction.followup.send(chunk)
-        
-        # Notificar si se truncó la respuesta
-        if len(respuesta) > sum(len(chunk) for chunk in chunks):
-            await interaction.followup.send("ℹ️ *La respuesta fue acortada por ser demasiado larga.*")
             
     except Exception as e:
         print(f"❌ Error en comando ask: {e}")
