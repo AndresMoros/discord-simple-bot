@@ -187,16 +187,21 @@ async def ask(interaction: discord.Interaction, pregunta: str):
         
         # DECISIÓN INTELIGENTE: ¿Archivo o mensajes?
         usar_archivo = False
-        
-        # 1. Si es MUY largo (>8000 caracteres) → Archivo
-        if len(respuesta) > 8000:
+
+        # 1. Límite para archivo automático (subir a 10000)
+        if len(respuesta) > 10000:  # ← De 6000 a 10000
             usar_archivo = True
             print("🔍 Decisión: Archivo (muy largo)")
-        
-        # 2. Si tiene estructura compleja (muchos puntos, listas) → Archivo
-        elif respuesta.count('.') > 30 or respuesta.count('-') > 20:
+
+        # 2. Límite para estructura compleja (hacer más estricto)
+        elif respuesta.count('.') > 80:  # ← De 20 a 80 puntos
             usar_archivo = True
             print("🔍 Decisión: Archivo (estructura compleja)")
+
+        # 3. Límite para mala división (ajustar)
+        elif len(chunks) > 4 and len(respuesta) > 8000:  # ← De 4000 a 8000
+            usar_archivo = True
+            print("🔍 Decisión: Archivo (mala división)")
         
         # 3. Si es moderadamente largo pero bien estructurado → Dividir en mensajes
         else:
