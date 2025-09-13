@@ -184,26 +184,22 @@ async def ask(interaction: discord.Interaction, pregunta: str):
         respuesta = await gemini_mgr.get_response(pregunta)
         
         print(f"📏 Longitud de respuesta: {len(respuesta)} caracteres")
+        print(f"🔍 Puntos en la respuesta: {respuesta.count('.')}")
         
         # DECISIÓN INTELIGENTE: ¿Archivo o mensajes?
         usar_archivo = False
 
-        # 1. Límite para archivo automático (subir a 10000)
-        if len(respuesta) > 10000:  # ← De 6000 a 10000
+        # 1. Si es MUY largo (>10000 caracteres) → Archivo
+        if len(respuesta) > 10000:
             usar_archivo = True
             print("🔍 Decisión: Archivo (muy largo)")
-
-        # 2. Límite para estructura compleja (hacer más estricto)
-        elif respuesta.count('.') > 80:  # ← De 20 a 80 puntos
+        
+        # 2. Si tiene estructura compleja (muchos puntos) → Archivo
+        elif respuesta.count('.') > 100:  # Más permisivo: 100 puntos
             usar_archivo = True
             print("🔍 Decisión: Archivo (estructura compleja)")
-
-        # 3. Límite para mala división (ajustar)
-        elif len(chunks) > 4 and len(respuesta) > 8000:  # ← De 4000 a 8000
-            usar_archivo = True
-            print("🔍 Decisión: Archivo (mala división)")
         
-        # 3. Si es moderadamente largo pero bien estructurado → Dividir en mensajes
+        # 3. Si no cumple las condiciones anteriores, probar dividir
         else:
             # Dividir respuesta normal
             chunks = split_long_message(respuesta)
@@ -211,15 +207,16 @@ async def ask(interaction: discord.Interaction, pregunta: str):
             
             print(f"📦 Número de chunks: {len(chunks)}")
             
-            # Verificar si la división es eficiente
-            if len(chunks) > 3 and len(respuesta) > 4000:
+            # 3.1 Verificar si la división es ineficiente
+            if len(chunks) > 3 and len(respuesta) > 8000:
                 usar_archivo = True
                 print("🔍 Decisión: Archivo (mala división)")
             else:
-                # Enviar como mensajes normales
+                # ✅ ENVIAR COMO MENSAJES
                 for i, chunk in enumerate(chunks):
                     print(f"Chunk {i}: {len(chunk)} caracteres")
                     if len(chunk) > 2000:
+                        print(f"⚠️ Chunk {i} truncado de {len(chunk)} a 2000 caracteres")
                         chunks[i] = chunk[:2000]
                 
                 # Enviar primer chunk
@@ -236,7 +233,7 @@ async def ask(interaction: discord.Interaction, pregunta: str):
                     await interaction.followup.send("ℹ️ *La respuesta fue ligeramente acortada.*")
                 return
         
-        # Si decidimos usar archivo
+        # SI DECIDIMOS USAR ARCHIVO
         if usar_archivo:
             await interaction.followup.send("📝 Creando documento con respuesta completa...")
             
