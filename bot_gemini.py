@@ -170,6 +170,7 @@ def create_markdown_file(pregunta, respuesta, username):
         f.write(markdown_content)
     
     return filename
+
 @bot.tree.command(name="ask", description="Haz una pregunta al bot con IA (respuesta completa)")
 @app_commands.describe(pregunta="Escribe tu pregunta aquí")
 async def ask(interaction: discord.Interaction, pregunta: str):
@@ -185,8 +186,8 @@ async def ask(interaction: discord.Interaction, pregunta: str):
         # DEBUG
         print(f"📏 Longitud de respuesta: {len(respuesta)} caracteres")
         
-        # ✅ NUEVO LÍMITE: Si la respuesta es > 2500 caracteres, enviar como archivo Markdown
-        if len(respuesta) > 2500:
+        # Si la respuesta es > 6000 caracteres, enviar como archivo Markdown
+        if len(respuesta) > 6000:
             await interaction.followup.send("📝 Respuesta muy larga. Enviando como archivo Markdown...")
             
             # Crear archivo Markdown con formato
