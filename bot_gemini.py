@@ -194,7 +194,7 @@ async def ask(interaction: discord.Interaction, pregunta: str):
             print("🔍 Decisión: Archivo (muy largo)")
         
         # 2. Si tiene estructura compleja (muchos puntos, listas) → Archivo
-        elif respuesta.count('.') > 20 or respuesta.count('-') > 10:
+        elif respuesta.count('.') > 30 or respuesta.count('-') > 20:
             usar_archivo = True
             print("🔍 Decisión: Archivo (estructura compleja)")
         
