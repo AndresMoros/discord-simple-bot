@@ -6,6 +6,10 @@ import os
 import asyncio
 from datetime import datetime
 
+# Cargar variables del archivo .env
+from dotenv import load_dotenv
+load_dotenv()
+
 # Configuración
 DISCORD_TOKEN = os.environ['DISCORD_TOKEN']
 GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
